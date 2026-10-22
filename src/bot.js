@@ -4,31 +4,31 @@ import { parseAmount, formatAmount } from './money.js';
 import { splitExpense, computeBalances, settle } from './settle.js';
 
 export const HELP = `💸 分帳機器人用法
-（「我」代表你自己的 LINE 名稱）
+（指令前面要加 /，「我」代表你自己的 LINE 名稱）
 
 📝 記帳
-記帳 小明 900 晚餐
+/記帳 小明 900 晚餐
 　→ 小明付 900，所有成員平分
-記帳 900 晚餐
+/記帳 900 晚餐
 　→ 你付的，所有成員平分
-記帳 小明 900 晚餐 分 小明 小華
+/記帳 小明 900 晚餐 分 小明 小華
 　→ 只有小明、小華平分
-記帳 小明 1000 住宿 分 小華:600 小美
+/記帳 小明 1000 住宿 分 小華:600 小美
 　→ 小華 600，剩下的小美負擔
-記帳 小明 1200 計程車 除了 小美
+/記帳 小明 1200 計程車 除了 小美
 　→ 小美以外的成員平分
 
-🔁 還款 小華 小明 300
+🔁 /還款 小華 小明 300
 　→ 小華已經還小明 300
 
-👥 成員 小明 小華 小美　新增成員
-👥 成員　看成員
-👥 移除 小美　移除（沒有帳目的）成員
+👥 /成員 小明 小華 小美　新增成員
+👥 /成員　看成員
+👥 /移除 小美　移除（沒有帳目的）成員
 
-📋 明細　看所有帳目
-🗑 刪除 3　刪除第 3 筆
-💰 結算　算出誰要轉多少給誰
-🧹 清空 確認　結清後清空帳目`;
+📋 /明細　看所有帳目
+🗑 /刪除 3　刪除第 3 筆
+💰 /結算　算出誰要轉多少給誰
+🧹 /清空 確認　結清後清空帳目`;
 
 const ME = new Set(['我', '自己']);
 const SPLIT_ONLY = new Set(['分', '分給', '平分', '給']);
@@ -37,6 +37,12 @@ const MAX_LIST = 40;
 const COMMANDS = new Set(['說明', '幫助', '分帳', 'help', '成員', '移除', '記帳', '記', '+', '還款', '還錢', '明細', '帳目', '刪除', '結算', '清空']);
 
 class UserError extends Error {}
+
+/** 「/記帳」「／記帳」→「記帳」；不是斜線開頭的已知指令就回傳 null。 */
+function commandName(word) {
+  const m = /^[/／](.+)$/.exec(word ?? '');
+  return m && COMMANDS.has(m[1]) ? m[1] : null;
+}
 
 function cleanName(raw) {
   return raw.replace(/^[@＠]/, '').trim();
@@ -50,8 +56,9 @@ export function createBot(store) {
   async function handle({ chatId, senderName, text }) {
     const tokens = text.trim().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return null;
-    const [cmd, ...args] = tokens;
-    if (!COMMANDS.has(cmd)) return null;
+    const [first, ...args] = tokens;
+    const cmd = commandName(first);
+    if (!cmd) return null;
 
     const resolve = (raw) => {
       const name = cleanName(raw);
@@ -101,7 +108,7 @@ export function createBot(store) {
     async function members(names) {
       if (names.length === 0) {
         const all = await store.members(chatId);
-        return all.length ? `👥 成員（${all.length} 人）：${all.join('、')}` : '還沒有成員，輸入「成員 小明 小華」新增。';
+        return all.length ? `👥 成員（${all.length} 人）：${all.join('、')}` : '還沒有成員，輸入「/成員 小明 小華」新增。';
       }
       const added = await store.addMembers(chatId, names.map(resolve));
       const all = await store.members(chatId);
@@ -110,7 +117,7 @@ export function createBot(store) {
     }
 
     async function removeMember(args) {
-      if (args.length !== 1) throw new UserError('用法：移除 小美');
+      if (args.length !== 1) throw new UserError('用法：/移除 小美');
       const name = resolve(args[0]);
       const used = (await store.expenses(chatId))
         .filter((e) => e.payer === name || e.shares.some((s) => s.name === name))
@@ -120,7 +127,7 @@ export function createBot(store) {
     }
 
     async function addExpense(args) {
-      const usage = '用法：記帳 小明 900 晚餐（或「記帳 900 晚餐」代表你付的）';
+      const usage = '用法：/記帳 小明 900 晚餐（或「/記帳 900 晚餐」代表你付的）';
       let payerRaw;
       let amount = parseAmount(args[0] ?? '');
       let rest;
@@ -146,7 +153,7 @@ export function createBot(store) {
         const all = await store.members(chatId);
         if (!all.includes(payer)) all.push(payer);
         if (all.length < 2) {
-          throw new UserError('目前只有一位成員，先用「成員 小明 小華」新增成員，或在記帳後面加「分 小明 小華」。');
+          throw new UserError('目前只有一位成員，先用「/成員 小明 小華」新增成員，或在記帳後面加「分 小明 小華」。');
         }
         participants = all.map((name) => ({ name }));
       } else if (SPLIT_EXCEPT.has(rest[kwIdx])) {
@@ -186,7 +193,7 @@ export function createBot(store) {
     }
 
     async function repay(args) {
-      if (args.length !== 3) throw new UserError('用法：還款 小華 小明 300（小華還給小明 300）');
+      if (args.length !== 3) throw new UserError('用法：/還款 小華 小明 300（小華還給小明 300）');
       const from = resolve(args[0]);
       const to = resolve(args[1]);
       const amount = parseAmount(args[2]);
@@ -225,7 +232,7 @@ export function createBot(store) {
 
     async function remove(args) {
       const no = Number(String(args[0] ?? '').replace(/^#/, ''));
-      if (!Number.isInteger(no) || no <= 0) throw new UserError('用法：刪除 3（編號請看「明細」）');
+      if (!Number.isInteger(no) || no <= 0) throw new UserError('用法：/刪除 3（編號請看「/明細」）');
       return await store.deleteExpense(chatId, no) ? `🗑 已刪除 #${no}` : `找不到 #${no}。`;
     }
 
@@ -241,18 +248,18 @@ export function createBot(store) {
       lines.push('', '各人收支（+ 是應收，- 是應付）：');
       const sorted = [...balances].filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
       for (const [name, v] of sorted) lines.push(`${name} ${v > 0 ? '+' : ''}${formatAmount(v)}`);
-      lines.push('', '轉完帳後可輸入「還款 A B 金額」記錄，或「清空 確認」重新開始。');
+      lines.push('', '轉完帳後可輸入「/還款 A B 金額」記錄，或「/清空 確認」重新開始。');
       return lines.join('\n');
     }
 
     async function clear(args) {
-      if (args[0] !== '確認') return '⚠️ 這會刪除這個聊天室的所有帳目（成員會保留）。確定的話請輸入「清空 確認」。';
+      if (args[0] !== '確認') return '⚠️ 這會刪除這個聊天室的所有帳目（成員會保留）。確定的話請輸入「/清空 確認」。';
       const n = await store.clearExpenses(chatId);
       return `🧹 已清空 ${n} 筆帳目。`;
     }
   }
 
-  return { handle, isCommand: (word) => COMMANDS.has(word) };
+  return { handle, isCommand: (word) => commandName(word) != null };
 }
 
 function formatShares(shares) {
