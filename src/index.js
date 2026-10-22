@@ -13,16 +13,18 @@ export default {
     if (request.method !== 'POST' || url.pathname !== '/webhook') return new Response('Not found', { status: 404 });
 
     const body = await request.text();
-    const ok = await verifySignature(body, request.headers.get('x-line-signature'), env.CHANNEL_SECRET);
+    const ok = await verifySignature(body, request.headers.get('x-line-signature'), (env.CHANNEL_SECRET ?? '').trim());
     if (!ok) return new Response('Bad signature', { status: 401 });
 
     const { events = [] } = JSON.parse(body);
-    const line = lineClient(env.CHANNEL_ACCESS_TOKEN);
+    const line = lineClient((env.CHANNEL_ACCESS_TOKEN ?? '').trim());
     const bot = createBot(new Store(env.DB));
     // 先回 200 給 LINE，事件在背景處理。
     ctx.waitUntil(
       Promise.all(
-        events.map((e) => handleEvent(e, bot, line).catch((err) => console.error('event failed', err))),
+        events.map((e) =>
+          handleEvent(e, bot, line).catch((err) => console.error(`event failed: ${err.message}`, err.stack)),
+        ),
       ),
     );
     return new Response('OK');
