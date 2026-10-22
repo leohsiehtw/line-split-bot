@@ -10,7 +10,7 @@ const bot = createBot(new Store(createLocalD1(process.env.DB_PATH || ':memory:')
 let me = process.argv[2] || '小明';
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: `${me}> ` });
 
-console.log('分帳機器人模擬器：輸入「/說明」看指令，「/名字 小華」切換發言者，Ctrl+D 離開。\n');
+console.log('分帳機器人模擬器：輸入「/help」看指令，「/名字 小華」切換發言者，Ctrl+D 離開。\n');
 rl.prompt();
 // 依序處理每一行，避免非同步回覆順序錯亂。
 let queue = Promise.resolve();
