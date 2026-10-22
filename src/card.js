@@ -38,7 +38,10 @@ function row(r) {
         type: 'box',
         layout: 'vertical',
         flex: 5,
-        contents: [text(r.left, { size: 'sm', color: '#111111' }), text(r.sub, { size: 'xs', color: '#8C8C8C' })],
+        contents: [
+          text(r.left, { size: 'sm', color: '#111111', weight: r.bold ? 'bold' : 'regular' }),
+          text(r.sub, { size: 'xs', color: '#8C8C8C' }),
+        ],
       }
     : text(r.left, { size: 'sm', color: '#111111', flex: 5, weight: r.bold ? 'bold' : 'regular' });
   if (r.right == null) return left;
@@ -79,7 +82,7 @@ export function toFlex(card) {
     body.push(text(card.footer, { size: 'xxs', color: '#8C8C8C', margin: 'md' }));
   }
 
-  return {
+  const bubble = {
     type: 'bubble',
     size: 'mega',
     header: {
@@ -89,6 +92,8 @@ export function toFlex(card) {
       paddingAll: 'lg',
       contents: header,
     },
-    body: { type: 'box', layout: 'vertical', paddingAll: 'lg', contents: body },
   };
+  // Flex 的 box 不能沒有內容，只有標題時就不放 body。
+  if (body.length) bubble.body = { type: 'box', layout: 'vertical', paddingAll: 'lg', contents: body };
+  return bubble;
 }

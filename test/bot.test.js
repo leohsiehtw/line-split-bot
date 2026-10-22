@@ -87,7 +87,7 @@ test('/me 把自己加進成員，/@ 把被提及的人加進成員', async () =
   assert.match(await say('/ME', '小華'), /新增：小華/);
   assert.match(await say('/@小美 ＠阿貓', '小明'), /新增：小美、阿貓/);
   assert.match(await say('/members'), /小明、小華、小美、阿貓/);
-  assert.equal(await say('/me', null), '⚠️ 讀不到你的 LINE 名稱，請直接打名字代替「我」。');
+  assert.match(await say('/me', null), /讀不到你的 LINE 名稱/);
 });
 
 test('沒寫付款人就是自己付', async () => {
