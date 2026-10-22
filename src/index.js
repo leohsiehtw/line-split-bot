@@ -58,7 +58,10 @@ function lineClient(token) {
   };
   return {
     reply: (replyToken, text) =>
-      call('POST', '/message/reply', { replyToken, messages: [{ type: 'text', text: text.slice(0, 5000) }] }),
+      call('POST', '/message/reply', {
+        replyToken,
+        messages: [{ type: 'text', text: text.slice(0, 5000), quickReply: QUICK_REPLY }],
+      }),
     profile(source) {
       if (source.type === 'group') return call('GET', `/group/${source.groupId}/member/${source.userId}`);
       if (source.type === 'room') return call('GET', `/room/${source.roomId}/member/${source.userId}`);
@@ -66,6 +69,17 @@ function lineClient(token) {
     },
   };
 }
+
+// 每則回覆下方的快捷按鈕（LINE Quick Reply），點一下就送出對應指令。
+const QUICK_REPLY = {
+  items: [
+    ['💰 結算', '/settle'],
+    ['📋 明細', '/list'],
+    ['🙋 加入', '/me'],
+    ['👥 成員', '/members'],
+    ['❓ 說明', '/help'],
+  ].map(([label, text]) => ({ type: 'action', action: { type: 'message', label, text } })),
+};
 
 // LINE 名稱可能有空白，統一去掉空白，指令才不會被拆開。
 const normalizeName = (name) => name.replace(/\s+/g, '');
