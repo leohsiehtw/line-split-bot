@@ -1,12 +1,12 @@
 name = "line-split-bot"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
+workers_dev = true
 
 [[d1_databases]]
 binding = "DB"
 database_name = "line-split-bot"
-# 執行 `npx wrangler d1 create line-split-bot` 後，把它印出的 database_id 貼到這裡
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "9ace7412-cdc0-42d5-a696-c724005ba055"
 migrations_dir = "migrations"
 
 [observability]
