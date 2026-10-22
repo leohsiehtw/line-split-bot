@@ -123,3 +123,52 @@ test('卡片可以轉成 Flex bubble', async () => {
   assert.match(json, /已記帳 #1/);
   assert.doesNotMatch(json, /"text":""/); // LINE 不接受空字串
 });
+
+test('/deletedata 要確認，刪掉成員與帳目', async () => {
+  const { say } = setup();
+  await say('/pay 小明 100 a for 小明 小華');
+  await say('/pay 小明 100 b for 小明 小華', '小明', 'g2');
+  assert.match(await say('/deletedata'), /deletedata confirm/);
+  assert.match(await say('/members'), /小明、小華/); // 沒確認就不刪
+  assert.match(await say('/刪除資料 確認'), /成員與 1 筆帳目/);
+  assert.match(await say('/members'), /還沒有成員/);
+  assert.match(await say('/list'), /沒有帳目/);
+  assert.match(await say('/list', '小明', 'g2'), /1 筆/); // 其他聊天室不受影響
+});
+
+test('說明與 /privacy 附上條款連結', async () => {
+  const bot = createBot(new Store(createLocalD1()), { baseUrl: 'https://bot.example' });
+  const { toFlex } = await import('../src/card.js');
+  for (const text of ['/help', '/privacy']) {
+    const out = await bot.handle({ chatId: 'g', senderName: '小明', text });
+    assert.match(out.text, /https:\/\/bot\.example\/privacy/);
+    const json = JSON.stringify(toFlex(out.card));
+    assert.match(json, /"uri":"https:\/\/bot\.example\/terms"/);
+  }
+  // 本機模擬器沒有網址就不放連結
+  assert.doesNotMatch((await createBot(new Store(createLocalD1())).help()).text, /privacy/);
+});
+
+test('離開超過 30 天的聊天室會被刪除，重新加入就取消', async () => {
+  const store = new Store(createLocalD1());
+  const day = 86400_000;
+  for (const id of ['old', 'recent', 'back', 'stay']) await store.addMembers(id, ['小明']);
+  await store.markLeft('old', new Date(Date.UTC(2026, 0, 1)));
+  await store.markLeft('back', new Date(Date.UTC(2026, 0, 1)));
+  await store.markLeft('recent', new Date(Date.UTC(2026, 0, 20)));
+  await store.unmarkLeft('back');
+  const n = await store.purgeLeftChats(new Date(Date.UTC(2026, 0, 31) - 30 * day + day));
+  assert.equal(n, 1);
+  assert.deepEqual(await store.members('old'), []);
+  assert.deepEqual(await store.members('recent'), ['小明']);
+  assert.deepEqual(await store.members('back'), ['小明']);
+  assert.deepEqual(await store.members('stay'), ['小明']);
+});
+
+test('條款頁', async () => {
+  const { legalPage } = await import('../src/legal.js');
+  assert.match(legalPage('/privacy'), /隱私權政策/);
+  assert.match(legalPage('/privacy'), /Cloudflare/);
+  assert.match(legalPage('/terms'), /使用條款/);
+  assert.equal(legalPage('/other'), null);
+});

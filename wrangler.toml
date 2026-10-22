@@ -9,5 +9,9 @@ database_name = "line-split-bot"
 database_id = "9ace7412-cdc0-42d5-a696-c724005ba055"
 migrations_dir = "migrations"
 
+# 每天台灣時間 03:00 刪除機器人已離開超過 30 天的聊天室資料。
+[triggers]
+crons = ["0 19 * * *"]
+
 [observability]
 enabled = true

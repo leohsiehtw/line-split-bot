@@ -2,15 +2,22 @@
 // 需要的設定（見 README）：D1 綁定 DB、secret CHANNEL_SECRET、CHANNEL_ACCESS_TOKEN。
 
 import { Store } from './store.js';
-import { createBot, HELP } from './bot.js';
+import { createBot } from './bot.js';
 import { toFlex } from './card.js';
+import { legalPage } from './legal.js';
 
 const LINE_API = 'https://api.line.me/v2/bot';
+// 機器人離開聊天室多久後刪除資料。
+const RETENTION_DAYS = 30;
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (request.method === 'GET') return new Response('LINE 分帳機器人運作中');
+    if (request.method === 'GET') {
+      const page = legalPage(url.pathname);
+      if (page) return new Response(page, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      return new Response('LINE 分帳機器人運作中');
+    }
     if (request.method !== 'POST' || url.pathname !== '/webhook') return new Response('Not found', { status: 404 });
 
     const body = await request.text();
@@ -19,16 +26,24 @@ export default {
 
     const { events = [] } = JSON.parse(body);
     const line = lineClient((env.CHANNEL_ACCESS_TOKEN ?? '').trim());
-    const bot = createBot(new Store(env.DB));
+    const store = new Store(env.DB);
+    const bot = createBot(store, { baseUrl: url.origin });
     // 先回 200 給 LINE，事件在背景處理。
     ctx.waitUntil(
       Promise.all(
         events.map((e) =>
-          handleEvent(e, bot, line).catch((err) => console.error(`event failed: ${err.message}`, err.stack)),
+          handleEvent(e, { bot, store, line }).catch((err) => console.error(`event failed: ${err.message}`, err.stack)),
         ),
       ),
     );
     return new Response('OK');
+  },
+
+  // 每天跑一次（wrangler.toml 的 crons），刪除機器人已離開超過 30 天的聊天室資料。
+  async scheduled(controller, env) {
+    const before = new Date(controller.scheduledTime - RETENTION_DAYS * 86400_000);
+    const n = await new Store(env.DB).purgeLeftChats(before);
+    if (n) console.log(`purged ${n} chats left before ${before.toISOString()}`);
   },
 };
 
@@ -99,12 +114,17 @@ export function flattenMentions(message) {
   return text;
 }
 
-async function handleEvent(event, bot, line) {
-  if (event.type === 'join' || event.type === 'follow') return line.reply(event.replyToken, HELP);
-  if (event.type !== 'message' || event.message.type !== 'text') return;
-
+async function handleEvent(event, { bot, store, line }) {
   const { source } = event;
   const chatId = source.groupId ?? source.roomId ?? source.userId;
+  // 被踢出群組或被封鎖：先記下來，30 天後由排程刪除；期間重新加入就取消。
+  if (event.type === 'leave' || event.type === 'unfollow') return store.markLeft(chatId);
+  if (event.type === 'join' || event.type === 'follow') {
+    await store.unmarkLeft(chatId);
+    return line.reply(event.replyToken, bot.help());
+  }
+  if (event.type !== 'message' || event.message.type !== 'text') return;
+
   const text = flattenMentions(event.message);
   if (!bot.isCommand(text.trim().split(/\s+/)[0])) return;
 

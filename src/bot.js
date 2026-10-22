@@ -6,7 +6,16 @@ import { cardReply } from './card.js';
 
 const cmd = (left, sub) => ({ left, sub, bold: true });
 
-export const HELP = cardReply({
+/** 隱私權政策與使用條款的連結；沒有網址（本機模擬器）就不放。 */
+export function legalLinks(baseUrl) {
+  if (!baseUrl) return [];
+  return [
+    { label: '隱私權政策', uri: `${baseUrl}/privacy` },
+    { label: '使用條款', uri: `${baseUrl}/terms` },
+  ];
+}
+
+export const helpCard = (baseUrl) => cardReply({
   title: '💸 分帳機器人用法',
   subtitle: '指令前面加 /，「我」代表你自己',
   sections: [
@@ -39,8 +48,13 @@ export const HELP = cardReply({
         cmd('/clear confirm', '結清後清空帳目'),
       ],
     },
+    {
+      heading: '🔒 資料',
+      rows: [cmd('/deletedata confirm', '永久刪除這個群組的成員與帳目')],
+    },
   ],
   footer: '指令不分大小寫，中文指令（/記帳、/結算…）也可以用',
+  links: legalLinks(baseUrl),
 });
 
 /** 簡單的提示卡片：一個標題加一段說明。 */
@@ -69,6 +83,8 @@ const ALIASES = {
   delete: ['delete', 'del', '刪除'],
   settle: ['settle', '結算'],
   clear: ['clear', '清空'],
+  deletedata: ['deletedata', '刪除資料'],
+  privacy: ['privacy', 'terms', '隱私', '條款'],
 };
 const COMMANDS = new Map(Object.entries(ALIASES).flatMap(([cmd, names]) => names.map((n) => [n, cmd])));
 
@@ -89,10 +105,13 @@ function cleanName(raw) {
   return raw.replace(/^[@＠]/, '').trim();
 }
 
-export function createBot(store) {
+/** @param {{ baseUrl?: string }} [options] baseUrl 是 Worker 的網址，用來產生隱私權政策連結 */
+export function createBot(store, { baseUrl } = {}) {
+  const help = () => helpCard(baseUrl);
+
   /**
    * @param {{chatId: string, senderName: string | null, text: string}} msg
-   * @returns {Promise<string | {text: string, card: object} | null>} 純文字或卡片（見 card.js） 要回覆的文字；不是指令就回傳 null（不打擾群組聊天）。
+   * @returns {Promise<string | {text: string, card: object} | null>} 純文字或卡片（見 card.js）；不是指令就回傳 null（不打擾群組聊天）。
    */
   async function handle({ chatId, senderName, text }) {
     const tokens = text.trim().split(/\s+/).filter(Boolean);
@@ -114,7 +133,7 @@ export function createBot(store) {
     try {
       switch (cmd) {
         case 'help':
-          return HELP;
+          return help();
         case 'me':
           return await members(['我']);
         case '@':
@@ -137,6 +156,10 @@ export function createBot(store) {
           return await settlement();
         case 'clear':
           return await clear(args);
+        case 'deletedata':
+          return await deleteData(args);
+        case 'privacy':
+          return privacy();
         default:
           return null;
       }
@@ -352,8 +375,37 @@ export function createBot(store) {
       const n = await store.clearExpenses(chatId);
       return notice(`🧹 已清空 ${n} 筆帳目`, '可以開始記下一次的帳了。', GRAY);
     }
+
+    async function deleteData(args) {
+      if (!CONFIRM.has(String(args[0]).toLowerCase())) {
+        return cardReply({
+          title: '⚠️ 確定要刪除所有資料？',
+          accent: RED,
+          sections: [
+            { text: '這會永久刪除這個聊天室的所有成員與帳目，無法復原。建議先用 /list 截圖留存。' },
+          ],
+          footer: '確定的話請輸入 /deletedata confirm',
+        });
+      }
+      const n = await store.deleteChat(chatId);
+      return notice('🗑 資料已刪除', `已刪除這個聊天室的成員與 ${n} 筆帳目。`, GRAY);
+    }
+
+    function privacy() {
+      return cardReply({
+        title: '🔒 隱私與資料',
+        sections: [
+          {
+            text:
+              '機器人只處理 / 開頭的指令，儲存成員名稱與帳目，不會讀取或保存一般聊天內容。' +
+              '輸入 /deletedata confirm 可立即刪除這個聊天室的資料；機器人離開群組 30 天後也會自動刪除。',
+          },
+        ],
+        links: legalLinks(baseUrl),
+      });
+    }
   }
 
-  return { handle, isCommand: (word) => commandName(word) != null };
+  return { handle, help, isCommand: (word) => commandName(word) != null };
 }
 

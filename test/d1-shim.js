@@ -1,11 +1,14 @@
 // 用 Node.js 內建的 node:sqlite 模擬 D1 的 API，讓測試和本機模擬器不需要 Cloudflare。
 
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 export function createLocalD1(file = ':memory:') {
   const db = new DatabaseSync(file);
-  db.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const f of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+    db.exec(readFileSync(new URL(f, dir), 'utf8'));
+  }
 
   const statement = (sql, params = []) => ({
     bind: (...args) => statement(sql, args),

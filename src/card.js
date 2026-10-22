@@ -4,6 +4,7 @@
 //   title, subtitle?, accent?,          // 標題列與顏色
 //   sections: [{ heading?, text?, rows?: [{ left, sub?, right?, tone?: 'pos' | 'neg', bold? }] }],
 //   footer?,
+//   links?: [{ label, uri }],           // 卡片最下方的連結按鈕
 // }
 
 const ACCENT = '#06C755';
@@ -27,6 +28,7 @@ export function cardToText(card) {
     }
   }
   if (card.footer) lines.push('', card.footer);
+  if (card.links?.length) lines.push('', ...card.links.map((l) => `${l.label}：${l.uri}`));
   return lines.join('\n');
 }
 
@@ -95,5 +97,18 @@ export function toFlex(card) {
   };
   // Flex 的 box 不能沒有內容，只有標題時就不放 body。
   if (body.length) bubble.body = { type: 'box', layout: 'vertical', paddingAll: 'lg', contents: body };
+  if (card.links?.length) {
+    bubble.footer = {
+      type: 'box',
+      layout: 'horizontal',
+      paddingAll: 'sm',
+      contents: card.links.map((l) => ({
+        type: 'button',
+        style: 'link',
+        height: 'sm',
+        action: { type: 'uri', label: l.label, uri: l.uri },
+      })),
+    };
+  }
   return bubble;
 }

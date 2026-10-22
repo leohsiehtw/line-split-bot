@@ -1,5 +1,5 @@
 // 資料儲存：Cloudflare D1（SQLite）。每個聊天室（群組、多人聊天或一對一）各自一本帳，以 chatId 區分。
-// 資料表定義在 migrations/0001_init.sql。
+// 資料表定義在 migrations/。
 
 export class Store {
   /** @param {D1Database} db D1 資料庫，或 test/d1-shim.js 的本機替身 */
@@ -61,5 +61,38 @@ export class Store {
   async clearExpenses(chatId) {
     const r = await this.db.prepare('DELETE FROM expenses WHERE chat_id = ?').bind(chatId).run();
     return r.meta.changes;
+  }
+
+  /** 刪除這個聊天室的所有成員與帳目，回傳刪掉的帳目筆數。 */
+  async deleteChat(chatId) {
+    const [, expenses] = await this.db.batch([
+      this.db.prepare('DELETE FROM members WHERE chat_id = ?').bind(chatId),
+      this.db.prepare('DELETE FROM expenses WHERE chat_id = ?').bind(chatId),
+      this.db.prepare('DELETE FROM left_chats WHERE chat_id = ?').bind(chatId),
+    ]);
+    return expenses.meta.changes;
+  }
+
+  /** 記錄機器人離開聊天室的時間，之後由 purgeLeftChats 刪除。 */
+  async markLeft(chatId, at = new Date()) {
+    await this.db
+      .prepare('INSERT OR REPLACE INTO left_chats (chat_id, left_at) VALUES (?, ?)')
+      .bind(chatId, at.toISOString())
+      .run();
+  }
+
+  /** 重新加入，取消待刪除。 */
+  async unmarkLeft(chatId) {
+    await this.db.prepare('DELETE FROM left_chats WHERE chat_id = ?').bind(chatId).run();
+  }
+
+  /** 刪除在 before 之前離開的聊天室資料，回傳刪掉幾個聊天室。 */
+  async purgeLeftChats(before) {
+    const { results } = await this.db
+      .prepare('SELECT chat_id FROM left_chats WHERE left_at < ?')
+      .bind(before.toISOString())
+      .all();
+    for (const { chat_id } of results) await this.deleteChat(chat_id);
+    return results.length;
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "line-split-bot",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "LINE 分帳機器人：記錄誰先付錢，自動算出誰要轉多少給誰",
   "main": "src/index.js",
   "directories": {

@@ -66,6 +66,13 @@ LINE ID：`@042zvtal`
 | `/clear confirm` | 全部結清後清空帳目（成員保留） |
 | `/help` | 顯示指令說明 |
 
+### 🔒 隱私與資料
+
+| 指令 | 說明 |
+|---|---|
+| `/deletedata confirm` | 永久刪除這個群組的所有成員與帳目 |
+| `/privacy` | 隱私權政策與使用條款的連結 |
+
 指令不分大小寫；舊的中文指令（`/記帳`、`/結算`、`/明細`…，以及 `分`、`除了`）也能用。
 
 ## 🧾 範例：三個人出去玩
@@ -111,6 +118,12 @@ LINE ID：`@042zvtal`
 <summary><b>轉帳次數是最少的嗎？</b></summary>
 
 結算時讓「欠最多的人先付給被欠最多的人」，n 個人最多 n-1 筆轉帳，一般情況就是最少筆數。
+</details>
+
+<details>
+<summary><b>機器人會看到我們的聊天內容嗎？資料存多久？</b></summary>
+
+機器人只處理 `/` 開頭的指令，其他訊息直接略過、不會存。存下來的只有成員名稱和帳目，放在 Cloudflare 的海外機房。輸入 `/deletedata confirm` 會立即刪除；把機器人移出群組 30 天後也會自動刪除（30 天內拉回來帳還在）。詳見[隱私權政策](https://line-split-bot.isleohsieh.workers.dev/privacy)與[使用條款](https://line-split-bot.isleohsieh.workers.dev/terms)。
 </details>
 
 <p align="center">
@@ -161,7 +174,7 @@ npm test
    - `CHANNEL_ACCESS_TOKEN`：步驟 1 的 access token
 4. **Settings → Domains & Routes** 把 workers.dev 的 Production 打開，記下網址，例如 `https://line-split-bot.你的帳號.workers.dev`。
 
-之後只要推新的程式到 GitHub，Cloudflare 就會自動重新部署。
+之後只要推新的程式到 GitHub，Cloudflare 就會自動重新部署。`wrangler.toml` 裡設定了每天一次的排程（Cron Trigger），刪除機器人已離開超過 30 天的群組資料，部署時會一起生效。
 
 #### 4. 接上 LINE
 
@@ -187,6 +200,7 @@ npm run deploy
 - `src/settle.js`：平分與結算演算法
 - `src/card.js`：回覆卡片（LINE Flex Message）的排版
 - `src/store.js`：D1 資料庫存取
+- `src/legal.js`：隱私權政策與使用條款頁（`/privacy`、`/terms`），改內容記得更新日期
 - `migrations/`：資料表定義
 - `cli.js`：本機模擬器（用 Node 內建 SQLite 模擬 D1）
 - `docs/`：README 用的截圖
