@@ -1,6 +1,6 @@
 {
   "name": "line-split-bot",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "LINE 分帳機器人：記錄誰先付錢，自動算出誰要轉多少給誰",
   "main": "src/index.js",
   "directories": {
@@ -10,7 +10,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "cli": "node --disable-warning=ExperimentalWarning cli.js",
-    "test": "node --disable-warning=ExperimentalWarning --test 'test/*.test.js'"
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\""
   },
   "license": "MIT",
   "engines": {

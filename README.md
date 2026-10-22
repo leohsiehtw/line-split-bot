@@ -2,7 +2,7 @@
 
 # 💸 分帳小幫手
 
-**LINE 群組分帳機器人**
+**LINE 群組分帳機器人**　·　[更新紀錄](CHANGELOG.md)
 
 聚餐、旅遊時記下誰先付了錢，自動算出「誰要轉多少給誰」，轉帳筆數最少。
 
@@ -190,3 +190,4 @@ npm run deploy
 - `migrations/`：資料表定義
 - `cli.js`：本機模擬器（用 Node 內建 SQLite 模擬 D1）
 - `docs/`：README 用的截圖
+- `CHANGELOG.md`：各版本的更新紀錄
