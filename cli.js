@@ -22,7 +22,7 @@ rl.on('line', (line) => {
       rl.setPrompt(`${me}> `);
     } else {
       const out = await bot.handle({ chatId: 'local', senderName: me, text: line });
-      if (out) console.log(out + '\n');
+      if (out) console.log((out.text ?? out) + '\n');
     }
     rl.prompt();
   });

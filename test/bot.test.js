@@ -6,7 +6,10 @@ import { createLocalD1 } from './d1-shim.js';
 
 function setup() {
   const bot = createBot(new Store(createLocalD1()));
-  const say = (text, senderName = '小明', chatId = 'g1') => bot.handle({ chatId, senderName, text });
+  const say = async (text, senderName = '小明', chatId = 'g1') => {
+    const out = await bot.handle({ chatId, senderName, text });
+    return out?.text ?? out;
+  };
   return { bot, say };
 }
 
@@ -45,7 +48,9 @@ test('除了：排除指定成員', async () => {
   const { say } = setup();
   await say('/add 小明 小華 小美');
   const out = await say('/pay 小華 1200 計程車 except 小美');
-  assert.match(out, /小明、小華 每人 600|小華、小明 每人 600/);
+  assert.match(out, /小明　600/);
+  assert.match(out, /小華　600/);
+  assert.doesNotMatch(out, /小美/);
 });
 
 test('刪除與清空', async () => {
@@ -89,7 +94,9 @@ test('沒寫付款人就是自己付', async () => {
   const { say } = setup();
   await say('/me', '小明');
   await say('/me', '小華');
-  assert.match(await say('/pay 200 住宿', '小華'), /住宿 200（小華 付）/);
+  const out = await say('/pay 200 住宿', '小華');
+  assert.match(out, /住宿　200/);
+  assert.match(out, /付款人　小華/);
 });
 
 test('舊的中文指令仍可用', async () => {
@@ -104,4 +111,15 @@ test('英文指令不分大小寫', async () => {
   const { say } = setup();
   assert.match(await say('/HELP'), /分帳機器人用法/);
   assert.match(await say('/Pay 小明 100 a for 小明 小華'), /#1/);
+});
+
+test('卡片可以轉成 Flex bubble', async () => {
+  const { toFlex } = await import('../src/card.js');
+  const bot = createBot(new Store(createLocalD1()));
+  const out = await bot.handle({ chatId: 'g', senderName: '小明', text: '/pay 900 晚餐 for 小明 小華' });
+  const bubble = toFlex(out.card);
+  assert.equal(bubble.type, 'bubble');
+  const json = JSON.stringify(bubble);
+  assert.match(json, /已記帳 #1/);
+  assert.doesNotMatch(json, /"text":""/); // LINE 不接受空字串
 });

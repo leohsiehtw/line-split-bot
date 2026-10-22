@@ -2,6 +2,7 @@
 
 import { parseAmount, formatAmount } from './money.js';
 import { splitExpense, computeBalances, settle } from './settle.js';
+import { cardReply } from './card.js';
 
 export const HELP = `💸 分帳機器人用法
 （指令前面要加 /，「我」代表你自己）
@@ -37,7 +38,7 @@ const ME = new Set(['我', '自己', 'me', 'Me', 'ME']);
 const SPLIT_ONLY = new Set(['for', 'only', '分', '分給', '平分', '給']);
 const SPLIT_EXCEPT = new Set(['except', '除了', '不含', '扣掉']);
 const CONFIRM = new Set(['confirm', 'yes', '確認']);
-const MAX_LIST = 40;
+const MAX_LIST = 30;
 // 指令以英文為主，舊的中文指令仍然可用。
 const ALIASES = {
   help: ['help', '說明', '幫助', '分帳'],
@@ -74,7 +75,7 @@ function cleanName(raw) {
 export function createBot(store) {
   /**
    * @param {{chatId: string, senderName: string | null, text: string}} msg
-   * @returns {Promise<string | null>} 要回覆的文字；不是指令就回傳 null（不打擾群組聊天）。
+   * @returns {Promise<string | {text: string, card: object} | null>} 純文字或卡片（見 card.js） 要回覆的文字；不是指令就回傳 null（不打擾群組聊天）。
    */
   async function handle({ chatId, senderName, text }) {
     const tokens = text.trim().split(/\s+/).filter(Boolean);
@@ -130,12 +131,19 @@ export function createBot(store) {
     async function members(names) {
       if (names.length === 0) {
         const all = await store.members(chatId);
-        return all.length ? `👥 成員（${all.length} 人）：${all.join('、')}` : '還沒有成員，輸入「/me」加入自己，或「/add 小明 小華」新增。';
+        return all.length ? membersCard() : '還沒有成員，輸入「/me」加入自己，或「/add 小明 小華」新增。';
       }
       const added = await store.addMembers(chatId, names.map(resolve));
+      return membersCard(added.length ? `新增：${added.join('、')}` : '這些人都已經是成員了');
+    }
+
+    async function membersCard(subtitle) {
       const all = await store.members(chatId);
-      const head = added.length ? `✅ 新增：${added.join('、')}` : '這些人都已經是成員了。';
-      return `${head}\n👥 成員（${all.length} 人）：${all.join('、')}`;
+      return cardReply({
+        title: `👥 成員（${all.length} 人）`,
+        subtitle,
+        sections: [{ text: all.join('、') }],
+      });
     }
 
     async function removeMember(args) {
@@ -209,9 +217,19 @@ export function createBot(store) {
       const added = await store.addMembers(chatId, newMembers);
       const no = await store.addExpense(chatId, { payer, amount, note, shares, createdBy: senderName ?? '' });
 
-      const lines = [`✅ #${no} ${note} ${formatAmount(amount)}（${payer} 付）`, formatShares(shares)];
-      if (added.length) lines.push(`👥 新成員：${added.join('、')}`);
-      return lines.join('\n');
+      return cardReply({
+        title: `✅ 已記帳 #${no}`,
+        subtitle: added.length ? `新成員：${added.join('、')}` : undefined,
+        sections: [
+          {
+            rows: [
+              { left: note, right: formatAmount(amount), bold: true },
+              { left: '付款人', right: payer },
+            ],
+          },
+          { heading: `分攤（${shares.length} 人）`, rows: shares.map((x) => ({ left: x.name, right: formatAmount(x.cents) })) },
+        ],
+      });
     }
 
     async function repay(args) {
@@ -230,9 +248,11 @@ export function createBot(store) {
         shares: [{ name: to, cents: amount }],
         createdBy: senderName ?? '',
       });
-      const lines = [`✅ #${no} ${from} 還給 ${to} ${formatAmount(amount)}`];
-      if (added.length) lines.push(`👥 新成員：${added.join('、')}`);
-      return lines.join('\n');
+      return cardReply({
+        title: `🔁 已記錄還款 #${no}`,
+        subtitle: added.length ? `新成員：${added.join('、')}` : undefined,
+        sections: [{ rows: [{ left: `${from} → ${to}`, right: formatAmount(amount), bold: true }] }],
+      });
     }
 
     async function list() {
@@ -240,16 +260,21 @@ export function createBot(store) {
       if (all.length === 0) return '📋 目前沒有帳目。';
       const total = all.filter((e) => e.note !== '還款').reduce((s, e) => s + e.amount, 0);
       const shown = all.slice(-MAX_LIST);
-      const lines = [`📋 帳目（${all.length} 筆，支出合計 ${formatAmount(total)}）`];
-      if (shown.length < all.length) lines.push(`…只顯示最後 ${MAX_LIST} 筆`);
-      for (const e of shown) {
-        if (e.note === '還款' && e.shares.length === 1) {
-          lines.push(`#${e.no} 🔁 ${e.payer} → ${e.shares[0].name} ${formatAmount(e.amount)}`);
-        } else {
-          lines.push(`#${e.no} ${e.note} ${formatAmount(e.amount)}｜${e.payer} 付｜${e.shares.map((s) => s.name).join('、')}`);
-        }
-      }
-      return lines.join('\n');
+      const rows = shown.map((e) =>
+        e.note === '還款' && e.shares.length === 1
+          ? { left: `#${e.no} 🔁 還款`, sub: `${e.payer} → ${e.shares[0].name}`, right: formatAmount(e.amount) }
+          : {
+              left: `#${e.no} ${e.note}`,
+              sub: `${e.payer} 付・${e.shares.length} 人分`,
+              right: formatAmount(e.amount),
+            },
+      );
+      return cardReply({
+        title: '📋 帳目明細',
+        subtitle: `${all.length} 筆・支出合計 ${formatAmount(total)}`,
+        sections: [{ rows }],
+        footer: shown.length < all.length ? `只顯示最後 ${MAX_LIST} 筆` : '記錯了可以用 /delete 編號 刪除',
+      });
     }
 
     async function remove(args) {
@@ -265,13 +290,27 @@ export function createBot(store) {
       const transfers = settle(balances);
       if (transfers.length === 0) return '💰 大家都結清了，不用轉帳 🎉';
 
-      const lines = ['💰 結算結果', ''];
-      for (const t of transfers) lines.push(`${t.from} → ${t.to}　${formatAmount(t.cents)}`);
-      lines.push('', '各人收支（+ 是應收，- 是應付）：');
       const sorted = [...balances].filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1]);
-      for (const [name, v] of sorted) lines.push(`${name} ${v > 0 ? '+' : ''}${formatAmount(v)}`);
-      lines.push('', '轉完帳後可輸入「/repay A B 金額」記錄，或「/clear confirm」重新開始。');
-      return lines.join('\n');
+      return cardReply({
+        title: '💰 結算結果',
+        subtitle: `${transfers.length} 筆轉帳就能結清`,
+        accent: '#F5A623',
+        sections: [
+          {
+            heading: '誰轉給誰',
+            rows: transfers.map((t) => ({ left: `${t.from} → ${t.to}`, right: formatAmount(t.cents), bold: true })),
+          },
+          {
+            heading: '各人收支',
+            rows: sorted.map(([name, v]) => ({
+              left: name,
+              right: `${v > 0 ? '+' : ''}${formatAmount(v)}`,
+              tone: v > 0 ? 'pos' : 'neg',
+            })),
+          },
+        ],
+        footer: '轉完帳後用 /repay A B 金額 記錄，或 /clear confirm 重新開始',
+      });
     }
 
     async function clear(args) {
@@ -284,10 +323,3 @@ export function createBot(store) {
   return { handle, isCommand: (word) => commandName(word) != null };
 }
 
-function formatShares(shares) {
-  const amounts = new Set(shares.map((s) => s.cents));
-  if (amounts.size === 1) {
-    return `👥 ${shares.map((s) => s.name).join('、')} 每人 ${formatAmount(shares[0].cents)}`;
-  }
-  return `👥 ${shares.map((s) => `${s.name} ${formatAmount(s.cents)}`).join('、')}`;
-}

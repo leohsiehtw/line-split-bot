@@ -3,6 +3,7 @@
 
 import { Store } from './store.js';
 import { createBot, HELP } from './bot.js';
+import { toFlex } from './card.js';
 
 const LINE_API = 'https://api.line.me/v2/bot';
 
@@ -57,11 +58,14 @@ function lineClient(token) {
     return res.json();
   };
   return {
-    reply: (replyToken, text) =>
-      call('POST', '/message/reply', {
-        replyToken,
-        messages: [{ type: 'text', text: text.slice(0, 5000), quickReply: QUICK_REPLY }],
-      }),
+    /** out 是純文字，或 { text, card }（畫成 Flex 卡片，text 當通知預覽）。 */
+    reply(replyToken, out) {
+      const message =
+        typeof out === 'string'
+          ? { type: 'text', text: out.slice(0, 5000) }
+          : { type: 'flex', altText: out.text.slice(0, 400), contents: toFlex(out.card) };
+      return call('POST', '/message/reply', { replyToken, messages: [{ ...message, quickReply: QUICK_REPLY }] });
+    },
     profile(source) {
       if (source.type === 'group') return call('GET', `/group/${source.groupId}/member/${source.userId}`);
       if (source.type === 'room') return call('GET', `/room/${source.roomId}/member/${source.userId}`);
